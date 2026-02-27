@@ -1,5 +1,5 @@
-# This is a clone-able repo for all your repo 
-## It is <ins>fully</ins> built out, all it needs is you to give it code and bring your project to *life*
+# Najjar's Commit
+## Najjar's Commit is a metroidvania
 
 
 # Name of your project
