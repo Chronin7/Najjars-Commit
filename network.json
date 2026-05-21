@@ -1,0 +1,23 @@
+[
+    {
+        "name": "x",
+        "operation": "",
+        "value": 5.0,
+        "inputs": []
+    },
+    {
+        "name": "w",
+        "operation": "",
+        "value": 4.0,
+        "inputs": []
+    },
+    {
+        "name": "output",
+        "operation": "*",
+        "value": null,
+        "inputs": [
+            "x",
+            "w"
+        ]
+    }
+]
