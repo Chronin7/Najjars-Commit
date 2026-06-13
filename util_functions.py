@@ -48,100 +48,8 @@ def debug(*variables,title="None"):
         print(f"Methods: {v_methods}")
         print("-" * 30)
 import math
-import turtle
-#make converson base funciton with perams of og base new base and number
-def convert_base(origonal_base,new_base,number):
-    if type(number)!=list:
-        number=[int(x) for x in str(number)]
-    number_convertion=0
-    for digit in number:
-        number_convertion=number_convertion*origonal_base+digit
-    out=[]
-    while number_convertion>0:
-        out.append(number_convertion%new_base)
-        number_convertion//=new_base
-    return out[::-1] if out else [0]
-def parse_turtle_data(expenses):
-    names=list(expenses.keys())
-    percentages=[val[0] for val in expenses.values()]
-    spending_over_time=[val[2] for val in expenses.values()]
-    colors=[]
-    if expenses:
-        jump_value=16777215//len(expenses)
-        for i in range(len(expenses)):
-            unique_num=(i*jump_value+12345)%16777215
-            rgb=convert_base(10,255,unique_num)
-            while len(rgb)<3:rgb.insert(0,0)
-            colors.append(tuple(rgb[:3]))
-        pie_chart(percentages,colors,names,100,0,(-300,0),100,20)
-        graph(spending_over_time,(-300,-200),150,10,colors)
-    wn.update()
-def pie_chart(list_of_persentages,list_of_collors,list_of_names,x_offset,y_offset,key_offset,size,key_size):
-    fred=turtle.Turtle()
-    fred.speed(0)
-    fred.hideturtle()
-    total_p=sum(list_of_persentages)
-    current_angle=0
-    for num,x in enumerate(list_of_persentages):
-        if total_p==0:angle=0
-        else:angle=(x/total_p)*360
-        fred.penup()
-        fred.goto(x_offset,y_offset+size)
-        fred.setheading(current_angle)
-        fred.color(list_of_collors[num])
-        fred.begin_fill()
-        fred.forward(size)
-        fred.left(90)
-        fred.circle(size,angle)
-        fred.left(90)
-        fred.forward(size)
-        fred.end_fill()
-        current_angle+=angle
-    fred.penup()
-    fred.goto(key_offset[0],key_offset[1]+50)
-    fred.color("black")
-    fred.write("key:",font=("Arial",int(key_size*1.3),"normal"))
-    for num,x in enumerate(list_of_names):
-        fred.penup()
-        fred.goto(key_offset[0],key_offset[1]-num*40)
-        fred.setheading(0)
-        fred.begin_fill()
-        fred.color(list_of_collors[num])
-        for _ in range(4):
-            fred.forward(key_size)
-            fred.right(90)
-        fred.end_fill()
-        fred.penup()
-        fred.goto(key_offset[0]+key_size/0.8,key_offset[1]-key_size/0.9-num*40)
-        fred.color("black")
-        fred.write(x,align="left",font=("Arial",key_size,"normal"))
-def graph(objs,graph_offset,graph_size,intensaty,list_of_collors):
-    joe=turtle.Turtle()
-    joe.hideturtle()
-    joe.speed(0)
-    joe.penup()
-    joe.goto(graph_offset)
-    joe.left(90)
-    joe.pendown()
-    joe.forward(graph_size)
-    joe.backward(graph_size)
-    joe.right(90)
-    joe.forward(graph_size*1.5)
-    max_val=max((max(dataset) for dataset in objs if dataset),default=1)
-    if max_val==0:max_val=1
-    y_scale=graph_size/max_val
-    for num1,x in enumerate(objs):
-        if not x:continue
-        joe.penup()
-        joe.color(list_of_collors[num1])
-        intensity=(graph_size*1.5)/(len(x)-1) if len(x)>1 else 0
-        for num2,y in enumerate(x):
-            new_x=graph_offset[0]+(num2*intensity)
-            new_y=graph_offset[1]+(y*y_scale)
-            joe.goto(new_x,new_y)
-            joe.pendown()
-
 import csv
+
 class csv_file:
     def __init__(self,path_to_csv):
         self.path_to_csv=path_to_csv
@@ -160,6 +68,7 @@ class csv_file:
             print(f"An error occurred: {e}")
     def __getitem__(self,index):
         return self.rows[index]
+    
     def __str__(self):
         output=""
         for row in self.rows:
@@ -197,12 +106,6 @@ class csv_file:
             except Exception as e:
                 print(f"An error occurred: {e}")
             self.sync()
-    def to_list(data):
-        for num,x in enumerate(data):
-            data[num]=str(x)
-        return "_".join(data)
-    def from_underscore(data):
-        return data.split("_")
     def to_dict(self):
         return self.rows
     def update_data(self,username,updated_row):

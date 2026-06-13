@@ -1,0 +1,34 @@
+the format of a map file is as folows
+
+indecator
+| refrance
+v vvvvvvvv
+w:wall.png
+this is a symple define
+
+n:NULL
+l:liquid
+
+
+indecator
+|| refrance refrance to other file
+|| |||||||| ||||||||||||||| pos of entity in refranced room after going thru door
+vv vvvvvvvv vvvvvvvvvvvvvvv vvv
+d1:door.png:second_room.map:4,7
+
+
+
+
+e1:goomba.entity:[any addishonal data goes in here]
+
+
+then defineing the actual room
+
+
+w,w,w,w,w,w,w,w,w,w,w,w,w,w
+w,n,n,n,n,n,n,n,n,n,n,n,n,w
+w,n,n,n,n,n,n,n,n,n,n,n,n,w
+w,n,n,n,n,n,n,n,n,n,n,n,n,w
+w,n,n,n,n,n,n,n,n,n,n,n,n,w
+d1,n,n,n,w,l,w,e1,n,n,n,n,n,w
+w,w,w,w,w,w,w,w,w,w,w,w,w,w
