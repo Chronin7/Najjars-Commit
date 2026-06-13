@@ -1,195 +1,465 @@
-import json,math,random,time
-class node:
-    def __init__(self,inputs: list,operation: str,name: str = "node"):
-        self.inputs = inputs
-        self.operation = operation
-        self.name = name
-        self.value = random.uniform(-5,5)
-        self.gradient = 0.0 # dLoss / dNode
-    def to_dict(self):
-        return {
-            "name": self.name,
-            "operation": self.operation,
-            "value": self.value,
-            "inputs": [n.name for n in self.inputs] # Store names,not objects
+
+# ai.py
+#
+# Generic Reinforcement Learning AI System
+#
+# Features:
+# - Works with ANY game
+# - Supports:
+#     bool
+#     float
+#     int
+#     list
+# - Deep neural network
+# - Replay memory
+# - Q-learning
+# - Save/load
+# - Exploration
+#
+# Designed for:
+# - Snake
+# - Platformers
+# - Shooters
+# - Emulator AI
+# - Eventually retro games like Super Metroid
+#
+# ================================================
+
+import random
+import math
+import json
+from collections import deque
+
+
+# ================================================
+# ACTIVATIONS
+# ================================================
+
+def relu(x):
+    return max(0.0, x)
+
+
+def relu_derivative(x):
+    return 1.0 if x > 0 else 0.0
+
+
+# ================================================
+# BRAIN
+# ================================================
+
+class Brain:
+
+    def __init__(
+        self,
+        input_size,
+        output_size,
+        hidden_layers=[64, 64],
+        learning_rate=0.001,
+        gamma=0.99,
+        epsilon=1.0,
+        epsilon_decay=0.99995,
+        epsilon_min=0.02,
+        memory_size=50000,
+        batch_size=64
+    ):
+
+        self.input_size = input_size
+        self.output_size = output_size
+
+        self.hidden_layers = hidden_layers
+
+        self.learning_rate = learning_rate
+
+        self.gamma = gamma
+
+        self.epsilon = epsilon
+        self.epsilon_decay = epsilon_decay
+        self.epsilon_min = epsilon_min
+
+        self.batch_size = batch_size
+
+        self.memory = deque(maxlen=memory_size)
+
+        # ========================================
+        # BUILD NETWORK
+        # ========================================
+
+        layer_sizes = (
+            [input_size]
+            + hidden_layers
+            + [output_size]
+        )
+
+        self.weights = []
+        self.biases = []
+
+        for i in range(len(layer_sizes) - 1):
+
+            current = layer_sizes[i]
+            nxt = layer_sizes[i + 1]
+
+            layer_weights = []
+
+            for _ in range(current):
+
+                row = []
+
+                for _ in range(nxt):
+                    row.append(random.uniform(-0.5, 0.5))
+
+                layer_weights.append(row)
+
+            layer_biases = []
+
+            for _ in range(nxt):
+                layer_biases.append(
+                    random.uniform(-0.5, 0.5)
+                )
+
+            self.weights.append(layer_weights)
+            self.biases.append(layer_biases)
+
+    # ============================================
+    # INPUT FLATTENING
+    # ============================================
+
+    def flatten(self, value):
+
+        result = []
+
+        if isinstance(value, bool):
+            result.append(float(value))
+
+        elif isinstance(value, (int, float)):
+            result.append(float(value))
+
+        elif isinstance(value, list):
+
+            for item in value:
+                result.extend(self.flatten(item))
+
+        else:
+            raise TypeError(
+                f"Unsupported type: {type(value)}"
+            )
+
+        return result
+
+    # ============================================
+    # FORWARD PASS
+    # ============================================
+
+    def predict(self, state):
+
+        x = self.flatten(state)
+
+        if len(x) != self.input_size:
+            raise ValueError(
+                f"Expected {self.input_size} inputs "
+                f"but got {len(x)}"
+            )
+
+        self.activations = [x]
+        self.z_values = []
+
+        current = x
+
+        for layer_i in range(len(self.weights)):
+
+            z_layer = []
+            next_layer = []
+
+            for neuron_i in range(len(self.biases[layer_i])):
+
+                total = self.biases[layer_i][neuron_i]
+
+                for prev_i in range(len(current)):
+
+                    total += (
+                        current[prev_i]
+                        * self.weights[layer_i][prev_i][neuron_i]
+                    )
+
+                z_layer.append(total)
+
+                # hidden layers
+                if layer_i < len(self.weights) - 1:
+                    next_layer.append(relu(total))
+
+                # output layer
+                else:
+                    next_layer.append(total)
+
+            self.z_values.append(z_layer)
+
+            current = next_layer
+
+            self.activations.append(current)
+
+        return current
+
+    # ============================================
+    # ACTION SELECTION
+    # ============================================
+
+    def choose_action(self, state):
+
+        # exploration
+        if random.random() < self.epsilon:
+            return random.randint(
+                0,
+                self.output_size - 1
+            )
+
+        q_values = self.predict(state)
+
+        return q_values.index(max(q_values))
+
+    # ============================================
+    # MEMORY
+    # ============================================
+
+    def remember(
+        self,
+        state,
+        action,
+        reward,
+        next_state,
+        done
+    ):
+
+        self.memory.append(
+            (
+                state,
+                action,
+                reward,
+                next_state,
+                done
+            )
+        )
+
+    # ============================================
+    # TRAIN SINGLE SAMPLE
+    # ============================================
+
+    def train_single(
+        self,
+        state,
+        target_q
+    ):
+
+        outputs = self.predict(state)
+
+        # ========================================
+        # OUTPUT ERROR
+        # ========================================
+
+        errors = []
+
+        for i in range(self.output_size):
+            errors.append(
+                target_q[i] - outputs[i]
+            )
+
+        layer_errors = [errors]
+
+        # ========================================
+        # BACKPROPAGATE
+        # ========================================
+
+        for layer_i in reversed(
+            range(len(self.weights) - 1)
+        ):
+
+            current_errors = []
+
+            for neuron_i in range(
+                len(self.activations[layer_i + 1])
+            ):
+
+                error = 0.0
+
+                for next_i in range(
+                    len(layer_errors[0])
+                ):
+
+                    error += (
+                        layer_errors[0][next_i]
+                        * self.weights[layer_i + 1][neuron_i][next_i]
+                    )
+
+                error *= relu_derivative(
+                    self.z_values[layer_i][neuron_i]
+                )
+
+                current_errors.append(error)
+
+            layer_errors.insert(0, current_errors)
+
+        # ========================================
+        # UPDATE WEIGHTS
+        # ========================================
+
+        for layer_i in range(len(self.weights)):
+
+            inputs_to_layer = self.activations[layer_i]
+
+            for input_i in range(len(inputs_to_layer)):
+
+                for neuron_i in range(
+                    len(layer_errors[layer_i])
+                ):
+
+                    self.weights[layer_i][input_i][neuron_i] += (
+                        self.learning_rate
+                        * layer_errors[layer_i][neuron_i]
+                        * inputs_to_layer[input_i]
+                    )
+
+            # biases
+            for neuron_i in range(
+                len(self.biases[layer_i])
+            ):
+
+                self.biases[layer_i][neuron_i] += (
+                    self.learning_rate
+                    * layer_errors[layer_i][neuron_i]
+                )
+
+    # ============================================
+    # EXPERIENCE REPLAY
+    # ============================================
+
+    def replay(self):
+
+        if len(self.memory) < self.batch_size:
+            return
+
+        batch = random.sample(
+            self.memory,
+            self.batch_size
+        )
+
+        for (
+            state,
+            action,
+            reward,
+            next_state,
+            done
+        ) in batch:
+
+            target = self.predict(state)
+
+            if done:
+                target[action] = reward
+
+            else:
+
+                future_q = max(
+                    self.predict(next_state)
+                )
+
+                target[action] = (
+                    reward
+                    + self.gamma * future_q
+                )
+
+            self.train_single(state, target)
+
+        # decay exploration
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    # ============================================
+    # HELPERS
+    # ============================================
+
+    def output_float(
+        self,
+        outputs,
+        index=0
+    ):
+        return outputs[index]
+
+    def output_bool(
+        self,
+        outputs,
+        index=0,
+        threshold=0
+    ):
+        return outputs[index] > threshold
+
+    def output_index(self, outputs):
+        return outputs.index(max(outputs))
+
+    def output_list(
+        self,
+        outputs,
+        threshold=0
+    ):
+
+        result = []
+
+        for i, value in enumerate(outputs):
+
+            if value > threshold:
+                result.append(i)
+
+        return result
+
+    # ============================================
+    # SAVE
+    # ============================================
+
+    def save(self, filename):
+
+        data = {
+
+            "weights": self.weights,
+            "biases": self.biases,
+
+            "input_size": self.input_size,
+            "output_size": self.output_size,
+
+            "hidden_layers": self.hidden_layers,
+
+            "learning_rate": self.learning_rate,
+
+            "gamma": self.gamma,
+
+            "epsilon": self.epsilon,
+            "epsilon_decay": self.epsilon_decay,
+            "epsilon_min": self.epsilon_min,
+
+            "batch_size": self.batch_size
         }
 
-    def compute(self):
-        if not self.inputs: return self.value
-        
-        vals = [n.value for n in self.inputs]
-        if self.operation == "+":    
-            self.value = sum(vals)
-        elif self.operation == "*":  
-            self.value = vals[0] * vals[1] if len(vals) > 1 else vals[0]
-        elif self.operation == "sig": # Sigmoid for boolean-like output
-            self.value = 1 / (1 + math.exp(-vals[0]))
-        elif self.operation == ">":   # Comparison
-            self.value = 1.0 if vals[0] > vals[1] else 0.0
-            
-        return self.value
+        with open(filename, "w") as f:
+            json.dump(data, f)
 
-    def backward(self):
-        if not self.inputs: return
-        
-        # Simple Chain Rule implementations
-        if self.operation == "+":
-            for n in self.inputs: n.gradient += 1.0 * self.gradient
-        elif self.operation == "*":
-            self.inputs[0].gradient += self.inputs[1].value * self.gradient
-            self.inputs[1].gradient += self.inputs[0].value * self.gradient
-        elif self.operation == "sig":
-            # dSigmoid = s * (1 - s)
-            s = self.value
-            self.inputs[0].gradient += (s * (1 - s)) * self.gradient
-class NodeManager:
-    def __init__(self):
-        self.nodes = []
+    # ============================================
+    # LOAD
+    # ============================================
 
-    def train_step(self,target,learning_rate=0.01):
-        # 1. Forward Pass
-        for n in self.nodes:
-            n.compute()
-        
-        # 2. Calculate Loss Gradient (assuming last node is output)
-        output_node = self.nodes[-1]
-        # Loss = (output - target)^2 -> Derivative = 2 * (output - target)
-        output_node.gradient = 2 * (output_node.value - target)
+    @classmethod
+    def load(cls, filename):
 
-        # 3. Backward Pass (Reverse order)
-        for n in reversed(self.nodes):
-            if n.inputs: # Only nodes with parents have a backward pass
-                n.backward()
-
-        # 4. Update Weights (Nodes with no inputs act as weights/parameters)
-        for n in self.nodes:
-            if not n.inputs:
-                n.value -= learning_rate * n.gradient
-            n.gradient = 0 # Reset for next step
-        
-    def add_node(self,n: node):
-        self.nodes.append(n)
-        return n
-
-    def run(self):
-        """Executes all nodes in the order they were added."""
-        results = {}
-        for n in self.nodes:
-            val = n.compute()
-            results[n.name] = val
-        return results
-
-    def set_input(self,name: str,value):
-        """Manually set value for an input node."""
-        for n in self.nodes:
-            if n.name == name:
-                n.value = value
-    
-    def save(self,filename: str):
-        data = [n.to_dict() for n in self.nodes]
-        with open(filename,'w') as f:
-            json.dump(data,f,indent=4)
-        print(f"Graph saved to {filename}")
-
-    def load(self,filename: str):
-        with open(filename,'r') as f:
+        with open(filename, "r") as f:
             data = json.load(f)
-        
-        self.nodes = []
-        node_map = {}
 
-        # 1. Recreate all node objects first
-        for d in data:
-            new_node = node([],d['operation'],d['name'])
-            new_node.value = d['value']
-            node_map[d['name']] = new_node
-            self.nodes.append(new_node)
+        brain = cls(
+            input_size=data["input_size"],
+            output_size=data["output_size"],
+            hidden_layers=data["hidden_layers"],
+            learning_rate=data["learning_rate"],
+            gamma=data["gamma"],
+            epsilon=data["epsilon"],
+            epsilon_decay=data["epsilon_decay"],
+            epsilon_min=data["epsilon_min"],
+            batch_size=data["batch_size"]
+        )
 
-        # 2. Re-link the inputs based on stored names
-        for d in data:
-            current_node = node_map[d['name']]
-            current_node.inputs = [node_map[input_name] for input_name in d['inputs']]
-    def run_and_learn(self,input_vals: list,targets: list,lr=0.1):
-        # 1. Load Inputs (Convert Bool to Float)
-        for i,val in enumerate(input_vals):
-            self.inputs[i].value = float(val)
+        brain.weights = data["weights"]
+        brain.biases = data["biases"]
 
-        # 2. Forward Pass
-        for n in self.nodes:
-            n.compute()
-
-        # 3. Calculate Loss & Backward Pass
-        # We calculate gradients for all outputs provided in targets
-        for i,target in enumerate(targets):
-            target_f = float(target)
-            out_node = self.outputs[i]
-            # Mean Squared Error Gradient
-            out_node.gradient = 2 * (out_node.value - target_f)
-
-        # 4. Backward Pass (Reverse)
-        for n in reversed(self.nodes):
-            n.backward()
-
-        # 5. Update Weights (Nodes with no inputs and no name in 'inputs')
-        for n in self.nodes:
-            if not n.inputs and n not in self.inputs:
-                n.value -= lr * n.gradient
-            n.gradient = 0 # Reset
-
-        return [n.value for n in self.outputs]
-class nural_net:
-    def __init__(self, layer_sizes, input_count, output_count):
-        self.mgr = NodeManager()
-        self.inputs = []
-        self.outputs = []
-        
-        # 1. Create Input Nodes
-        for i in range(input_count):
-            n = self.mgr.add_node(node([], "", f"in_{i}"))
-            self.inputs.append(n)
-            
-        prev_layer = self.inputs
-        
-        # 2. Create Hidden Layers
-        # layer_sizes example: [8, 8]
-        for l_idx, size in enumerate(layer_sizes):
-            current_layer = []
-            for n_idx in range(size):
-                # Weight nodes (parameters with no inputs)
-                weights = [self.mgr.add_node(node([], "", f"w_l{l_idx}_n{n_idx}_i{i}")) 
-                           for i in range(len(prev_layer))]
-                
-                # Multiply inputs by weights and sum them
-                # For simplicity, we'll sum (input * weight) pairs
-                mult_nodes = []
-                for i, p_node in enumerate(prev_layer):
-                    m = self.mgr.add_node(node([p_node, weights[i]], "*", f"m_l{l_idx}_n{n_idx}_i{i}"))
-                    mult_nodes.append(m)
-                
-                # Sum the results and pass through Sigmoid activation
-                sum_node = self.mgr.add_node(node(mult_nodes, "+", f"sum_l{l_idx}_n{n_idx}"))
-                sig_node = self.mgr.add_node(node([sum_node], "sig", f"sig_l{l_idx}_n{n_idx}"))
-                
-                current_layer.append(sig_node)
-            prev_layer = current_layer
-
-        # 3. Create Output Nodes
-        for i in range(output_count):
-            # Final output layer (connected to last hidden layer)
-            out_weights = [self.mgr.add_node(node([], "", f"out_w_{i}_{j}")) 
-                           for j in range(len(prev_layer))]
-            out_mults = [self.mgr.add_node(node([prev_layer[j], out_weights[j]], "*", f"out_m_{i}_{j}"))
-                         for j in range(len(prev_layer))]
-            
-            out_final = self.mgr.add_node(node(out_mults, "+", f"out_{i}"))
-            self.outputs.append(out_final)
-            
-        # Attach to manager for the run_and_learn method
-        self.mgr.inputs = self.inputs
-        self.mgr.outputs = self.outputs
-
-    def predict(self, input_vals):
-        return self.mgr.run_and_learn(input_vals, [0]*len(self.outputs), lr=0)
-
-    def train(self, input_vals, targets, lr=0.1):
-        return self.mgr.run_and_learn(input_vals, targets, lr=lr)
+        return brain
