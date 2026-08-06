@@ -136,8 +136,8 @@ class Brain:
 GRID_SIZE = 20
 CELL_SIZE = 25
 
-WIDTH = GRID_SIZE * CELL_SIZE
-HEIGHT = GRID_SIZE * CELL_SIZE
+WIDTH = GRID_SIZE * CELL_SIZE+500
+HEIGHT = GRID_SIZE * CELL_SIZE+100
 
 pygame.init()
 
@@ -276,12 +276,12 @@ class SnakeGame:
         )
 
         txt = font.render(
-            f"Score: {self.score}",
+            f"""Games: {games} | Score: {game.score} | Best: {best_score} | Total: {score} | Reward: {reward} | Epsilon: {round(epsilon, 3)}""",
             True,
             WHITE
         )
 
-        win.blit(txt, (10, 10))
+        win.blit(txt, (10, 550))
 
         pygame.display.update()
 
@@ -487,7 +487,8 @@ while running:
         for x in range(game.score+1):
             epsilon *= 0.99995
         epsilon *= 0.999995
-
+    if epsilon <.5 and best_score<3:
+        epsilon=1
     # =====================================================
     # DRAW
     # =====================================================

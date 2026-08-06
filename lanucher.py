@@ -32,9 +32,9 @@ def setup_and_run():
 
     # 3. Launch the game using the venv's python
     print("Launching Metroidvania...")
-    if os.path.exists("main.py"):
+    if os.path.exists("tile_editer.py"):
         # os.execv replaces the current process with the venv python process
-        os.execv(venv_python, [venv_python, "main.py"])
+        os.execv(venv_python, [venv_python, "tile_editer.py"])
     else:
         print("Error: main.py not found.")
 

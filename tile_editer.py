@@ -1,4 +1,4 @@
-import pygame
+import pygame,time
 
 # ----------------------------
 # MAP FILE (SPARSE SYSTEM)
@@ -19,17 +19,255 @@ def parse_definition(line):
     data = parts[1:]
 
     return key, data, hover
+class MapEditor:
+
+    def __init__(self, path):
+
+        self.file = MapFile(path)
+
+        self.tile_size = 32
+
+        self.camera_x = 0
+        self.camera_y = 0
+
+        self.menu_open = False
+        self.menu_screen_pos = (0, 0)
+        self.context_pos = (0, 0)
+
+        self.palette = list(self.file.definitions.keys())
+        self.selected_index = 0
+
+        self.tile_images = {}
+
+        self.load_tiles()
+
+    # -------------------------
+    # LOAD TILE IMAGES
+    # -------------------------
+
+    def load_tiles(self):
+
+        self.tile_images.clear()
+
+        for key, data in self.file.definitions.items():
+
+            asset = data[0]
+
+            if asset.endswith(".png"):
+
+                try:
+                    image = pygame.image.load(asset).convert_alpha()
+
+                except:
+
+                    image = pygame.Surface((32, 32))
+                    image.fill((255, 0, 255))
+
+                self.tile_images[key] = image
+
+    # -------------------------
+    # GRID CONVERSION
+    # -------------------------
+
+    def screen_to_grid(self, sx, sy):
+
+        gx = (sx + self.camera_x) // self.tile_size
+        gy = (sy + self.camera_y) // self.tile_size
+
+        return int(gx), int(gy)
+
+    # -------------------------
+    # PAINT
+    # -------------------------
+
+    def paint(self, x, y):
+        print(x,y)
+        tile = self.palette[self.selected_index]
+        if (x, y) in self.file.metadata.keys():
+
+            self.file.metadata.pop((x,y))
+            print("popd")
+        if tile == "n":
+
+            self.file.tiles.pop((x, y), None)
+
+        else:
+
+            self.file.tiles[(x, y)] = tile
+
+    # -------------------------
+    # TILE SELECTION
+    # -------------------------
+
+    def scroll(self, amount):
+
+        self.selected_index += amount
+
+        self.selected_index %= len(self.palette)
+
+    # -------------------------
+    # SAVE
+    # -------------------------
+
+    def save(self):
+
+        self.file.save()
+
+    # -------------------------
+    # DRAW GRID
+    # -------------------------
+
+    def draw_grid(self, screen):
+
+        left = self.camera_x // self.tile_size
+        top = self.camera_y // self.tile_size
+
+        right = left + screen.get_width() // self.tile_size + 2
+        bottom = top + screen.get_height() // self.tile_size + 2
+
+        for x in range(left, right):
+
+            sx = x * self.tile_size - self.camera_x
+
+            pygame.draw.line(
+                screen,
+                (40, 40, 40),
+                (sx, 0),
+                (sx, screen.get_height())
+            )
+
+        for y in range(top, bottom):
+
+            sy = y * self.tile_size - self.camera_y
+
+            pygame.draw.line(
+                screen,
+                (40, 40, 40),
+                (0, sy),
+                (screen.get_width(), sy)
+            )
+
+    # -------------------------
+    # DRAW TILES
+    # -------------------------
+
+    def draw_tiles(self, screen):
+
+        for (x, y), tile in self.file.tiles.items():
+
+            sx = x * self.tile_size - self.camera_x
+            sy = y * self.tile_size - self.camera_y
+
+            if tile in self.tile_images:
+
+                img = pygame.transform.scale(
+                    self.tile_images[tile],
+                    (self.tile_size, self.tile_size)
+                )
+
+                screen.blit(img, (sx, sy))
+
+    # -------------------------
+    # DRAW METADATA OBJECTS
+    # -------------------------
+
+    def draw_metadata(self, screen):
+
+        for (x, y), meta in self.file.metadata.items():
+
+            if len(meta["data"]) == 0:
+                continue
+
+            sprite = meta["data"][0]
+
+            if not sprite.endswith(".png"):
+                continue
+
+            try:
+
+                img = pygame.image.load(sprite).convert_alpha()
+
+                img = pygame.transform.scale(
+                    img,
+                    (self.tile_size, self.tile_size)
+                )
+
+                sx = x * self.tile_size - self.camera_x
+                sy = y * self.tile_size - self.camera_y
+
+                screen.blit(img, (sx, sy))
+
+            except:
+                pass
+
+    # -------------------------
+    # DRAW SELECTED TILE UI
+    # -------------------------
+
+    def draw_ui(self, screen):
+
+        font = pygame.font.SysFont(None, 24)
+
+        selected = self.palette[self.selected_index]
+
+        text = font.render(
+            f"Selected: {selected}",
+            True,
+            (255, 255, 255)
+        )
+
+        screen.blit(text, (10, 10))
+
+    # -------------------------
+    # MAIN DRAW
+    # -------------------------
+
+    def draw(self, screen):
+
+        self.draw_grid(screen)
+
+        self.draw_tiles(screen)
+
+        self.draw_metadata(screen)
+
+        self.draw_ui(screen)# ----------------------------
+# TILE
+# ----------------------------
+
+class Tile:
+    def __init__(self, path,metadata=None):
+        if path == "null.png":
+            # Create a 32x32 completely transparent surface
+            self.image = pygame.Surface((32, 32), pygame.SRCALPHA)
+            self.image.fill((0, 0, 0, 0))  # 0 alpha means 100% clear
+        else:
+            try:
+                self.image = pygame.image.load(path).convert_alpha()
+            except pygame.error:
+                self.image = pygame.Surface((32, 32))
+                self.image.fill((80, 200, 80))
+        if metadata:
+            self.metadata=metadata
+    def __str__(self):
+        pass
+
+# ----------------------------
+# EDITOR
+# ----------------------------
+
 class MapFile:
     def __init__(self, path):
         self.path = path
         self.sync()
-    def sync(self):
-        self.definitions = {}
-        self.hover = {}   # NEW: hover metadata
-        self.tiles = {}
 
-        with open(self.path, "r") as file:
-            lines = [l.strip() for l in file if l.strip()]
+    def sync(self):
+
+        self.definitions = {}
+        self.tiles = {}
+        self.metadata = {}
+
+        with open(self.path, "r") as f:
+            lines = [line.strip() for line in f if line.strip()]
 
         mode = None
         y = 0
@@ -44,336 +282,317 @@ class MapFile:
                 mode = "map"
                 continue
 
-            # --------------------
+            if line == "[metadata]":
+                mode = "metadata"
+                continue
+
+            # -----------------
             # DEFINITIONS
-            # --------------------
+            # -----------------
+
             if mode == "defs":
 
-                key, data, hover = parse_definition(line)
-
+                key, *data = line.split(":")
                 self.definitions[key] = data
 
-                if hover:
-                    self.hover[key] = hover
-
-            # --------------------
+            # -----------------
             # MAP
-            # --------------------
+            # -----------------
+
             elif mode == "map":
 
                 row = line.split(",")
 
                 for x, cell in enumerate(row):
+
                     if cell != "n":
                         self.tiles[(x, y)] = cell
 
                 y += 1
-    def save(self):
-        # Safely capture boundaries even if the user paints into negative coordinates
-        if self.tiles:
-            min_x = min(x for x, y in self.tiles.keys())
-            max_x = max(x for x, y in self.tiles.keys())
-            min_y = min(y for x, y in self.tiles.keys())
-            max_y = max(y for x, y in self.tiles.keys())
-        else:
-            min_x = max_x = min_y = max_y = 0
 
-        with open(self.path, "w") as f:
-            # 1. Write definitions section
-            f.write("[DEFS]\n")
-            for k, v in self.definitions.items():
-                hover_suffix = f";{self.hover[k]}" if k in self.hover else ""
-                f.write(f"{k}:{':'.join(v)}{hover_suffix}\n")
+            # -----------------
+            # METADATA
+            # -----------------
 
-            f.write("\n[MAP]\n")
+            elif mode == "metadata":
 
-            # 2. Rebuild dense grid layout from sparse coordinates
-            for y in range(min_y, max_y + 1):
-                row = []
-                for x in range(min_x, max_x + 1):
-                    row.append(self.tiles.get((x, y), "n"))
-                f.write(",".join(row) + "\n")
+                pos, rest = line.split(":", 1)
 
+                x, y = map(int, pos.split(","))
 
-# ----------------------------
-# TILE
-# ----------------------------
+                if ";" in rest:
+                    data_part, hover = rest.split(";", 1)
+                else:
+                    data_part = rest
+                    hover = ""
 
-class Tile:
-    def __init__(self, path):
-        if path == "null.png":
-            # Create a 32x32 completely transparent surface
-            self.image = pygame.Surface((32, 32), pygame.SRCALPHA)
-            self.image.fill((0, 0, 0, 0))  # 0 alpha means 100% clear
-        else:
-            try:
-                self.image = pygame.image.load(path).convert_alpha()
-            except pygame.error:
-                self.image = pygame.Surface((32, 32))
-                self.image.fill((80, 200, 80))
+                data = data_part.split(":")
 
-
-# ----------------------------
-# EDITOR
-# ----------------------------
-
-class MapEditor:
-    def __init__(self, path):
-        self.file = MapFile(path)
-
-        self.tile_size = 32
-        self.camera_x = 0
-        self.camera_y = 0
-
-        self.tiles = {}
-        self.load_tiles()
-
-        self.palette = list(self.file.definitions.keys())
-        self.selected_index = 0
-        self.context_tile = None
-        self.context_pos = (0, 0)
-        self.menu_open = False
-        self.center_camera()
-
-    # ----------------------------
-    # LOAD SPRITES
-    # ----------------------------
-    def load_tiles(self):
-        self.tiles = {}
-
-        for key, value in self.file.definitions.items():
-
-            asset = value[0]
-
-            # NORMAL TILE (PNG)
-            if asset.endswith(".png"):
-                self.tiles[key] = Tile(asset)
-
-            # ENTITY / DOOR / SPECIAL OBJECT
-            else:
-                self.tiles[key] = {
-                    "type": "special",
-                    "data": value
+                self.metadata[(x, y)] = {
+                    "data": data,
+                    "hover": hover
                 }
-            
 
-    # ----------------------------
-    # CAMERA CENTER
-    # ----------------------------
+def get_context_menu(editor):
+    menu = ["METADATA"]
 
-    def center_camera(self):
-        if not self.file.tiles:
-            return
+    meta = editor.file.metadata.get(editor.context_pos)
 
-        max_x = max(x for x, y in self.file.tiles.keys())
-        max_y = max(y for x, y in self.file.tiles.keys())
+    if meta and "door" in meta.get("hover", ""):
+        menu = ["GTR", "METADATA"]
 
-        self.camera_x = (max_x * self.tile_size) // 2 - W // 2
-        self.camera_y = (max_y * self.tile_size) // 2 - H // 2
-
-    # ----------------------------
-    # GRID CONVERSION
-    # ----------------------------
-
-    def screen_to_grid(self, x, y):
-        gx = (x + self.camera_x) // self.tile_size
-        gy = (y + self.camera_y) // self.tile_size
-        return int(gx), int(gy)
-
-    # ----------------------------
-    # PAINT (AUTO EXPAND WORLD)
-    # ----------------------------
-
-    def paint(self, x, y):
-        key = self.palette[self.selected_index]
-        self.file.tiles[(x, y)] = key
-
-    # ----------------------------
-    # PALETTE SCROLL
-    # ----------------------------
-
-    def scroll(self, direction):
-        self.selected_index = (self.selected_index + direction) % len(self.palette)
-
-    # ----------------------------
-    # SAVE
-    # ----------------------------
-
-    def save(self):
-        self.file.save()
-
+    return menu
 
 # ----------------------------
 # MAIN
 # ----------------------------
 
 def main():
-    tic=0
     pygame.init()
-
     global W, H
-    W, H = 800, 600
+    W, H = 1280, 720
+
     screen = pygame.display.set_mode((W, H))
+    pygame.display.set_caption("Map Editor")
+
     clock = pygame.time.Clock()
 
     editor = MapEditor("test.map")
 
     running = True
-    down=False
-    menu=False
+    painting = False
+    tic=0
     while running:
-        clock.tick(60)
-        for event in pygame.event.get():
 
+        dt = clock.tick(60)
+
+        # --------------------
+        # EVENTS
+        # --------------------
+
+        for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-            # paint
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button!=3:
-                    down=True
-            if down:
-                mx, my = pygame.mouse.get_pos()
-                gx, gy = editor.screen_to_grid(mx, my)
-                editor.paint(gx, gy)
-            if event.type==pygame.MOUSEBUTTONUP:
-                down=False
-                if event.button == 3:
-                    menu=True
-            if event.type==pygame.MOUSEBUTTONDOWN:
-                if event.button == 3:
-                    menu=True
-            if menu:
-                mx, my = pygame.mouse.get_pos()
-                gx, gy = editor.screen_to_grid(mx, my)
-
-                editor.context_tile = editor.file.tiles.get((gx, gy))
-                editor.context_pos = (gx, gy)
-                editor.menu_open = True
-                    
-
-        # camera
-        keys = pygame.key.get_pressed()
-        speed = 5
-        if keys[pygame.K_a]:
-            editor.camera_x -= speed
-        if keys[pygame.K_d]:
-            editor.camera_x += speed
-        if keys[pygame.K_w]:
-            editor.camera_y -= speed
-        if keys[pygame.K_s]:
-            editor.camera_y += speed
-        if keys[pygame.K_MINUS] and tic<0:
-            editor.scroll(-1)
-            tic=5
-        if keys[pygame.K_EQUALS] and tic<0:
-            editor.scroll(1)
-            tic=5
-        if keys[pygame.K_i]:
-            editor.save()
-        tic-=1
-        # draw
-        screen.fill((20, 20, 20))
-        for (x, y), cell in editor.file.tiles.items():
-
-            sx = x * editor.tile_size - editor.camera_x
-            sy = y * editor.tile_size - editor.camera_y
-
-            tile_obj = editor.tiles.get(cell)
-
-            if isinstance(tile_obj, Tile):
-                img = pygame.transform.scale(
-                    tile_obj.image,
-                    (editor.tile_size, editor.tile_size)
-                )
-                screen.blit(img, (sx, sy))
-
-            else:
-                # SPECIAL OBJECT RENDER (door/entity placeholder)
-                pygame.draw.rect(
-                    screen,
-                    (200, 80, 80),
-                    (sx, sy, editor.tile_size, editor.tile_size)
-                )
-
-        # UI
-        font = pygame.font.SysFont(None, 24)
-        selected = editor.palette[editor.selected_index]
-
-        text = font.render(
-            f"Selected: {selected}",
-            True,
-            (255, 255, 255)
-        )
-
-        screen.blit(text, (10, 10))
-        mx, my = pygame.mouse.get_pos()
-        gx = (mx + editor.camera_x) // editor.tile_size
-        gy = (my + editor.camera_y) // editor.tile_size
-        tile_id = editor.file.tiles.get((gx, gy))
-        hover_text = None
-
-        if tile_id:
-            hover_text = editor.file.hover.get(tile_id)
-        if hover_text:
-            font = pygame.font.SysFont(None, 24)
-
-            text_surface = font.render(
-                hover_text,
-                True,
-                (255, 255, 255)
-            )
-
-            # background box
-            pygame.draw.rect(
-                screen,
-                (0, 0, 0),
-                (mx + 10, my + 10, text_surface.get_width() + 6, text_surface.get_height() + 6)
-            )
-            if editor.menu_open:
-
-                mx, my = pygame.mouse.get_pos()
-
-                menu_w, menu_h = 160, 80
-
-                pygame.draw.rect(screen, (30, 30, 30), (mx, my, menu_w, menu_h))
-                pygame.draw.rect(screen, (255, 255, 255), (mx, my, menu_w, menu_h), 2)
-
-                font = pygame.font.SysFont(None, 22)
-
-                t1 = font.render("1. Edit Metadata", True, (255, 255, 255))
-                t2 = font.render("2. Go To Room", True, (255, 255, 255))
-
-                screen.blit(t1, (mx + 10, my + 10))
-                screen.blit(t2, (mx + 10, my + 35))
-                if editor.menu_open:
+                print("click")
+                # LEFT CLICK
+                if event.button == 1:
+                    if editor.menu_open:
+                        editor.menu_open=False
+                        print("menu false")
+                    else:
+                        painting = True
+                        print("painting true")
+                # RIGHT CLICK
+                elif event.button == 3:
 
                     mx, my = pygame.mouse.get_pos()
 
-                    # click inside menu
-                    if keys[pygame.K_1]:
-                        print("OPEN METADATA EDITOR")
-                    elif keys[pygame.K_2]:
-                        tile = editor.context_tile
+                    gx, gy = editor.screen_to_grid(mx, my)
 
-                        if tile:
-                            data = editor.file.definitions.get(tile)
+                    editor.context_pos = (gx, gy)
+                    editor.menu_open = True
+                    editor.menu_screen_pos = (mx, my)
 
-                            if data and len(data) >= 3:
-                                room = data[1]
-                                x = int(data[2])
-                                y = int(data[3])
+            if event.type == pygame.MOUSEBUTTONUP:
+                print("unclick")
+                if event.button == 1:
+                    painting = False
 
-                                load_room(editor, room)
+            if event.type == pygame.MOUSEWHEEL:
+
+                if event.y > 0:
+                    editor.scroll(-1)
+
+                elif event.y < 0:
+                    editor.scroll(1)
+
+        if event.type == pygame.KEYDOWN:
+
+            if event.key == pygame.K_i:
+                editor.save()
+            if event.key==pygame.K_k:
+                print("ho")
+            if event.key == pygame.K_ESCAPE:
+                editor.menu_open = False
+
+            if editor.menu_open:
+                menu = get_context_menu(editor)
+
+                if event.key == pygame.K_1:
+                    print("hi")
+                    if "METADATA" in menu:
+                        meta = editor.file.metadata.get(editor.context_pos)
+                        print("Edit metadata:", editor.context_pos, meta)
+
+                        # Put your metadata editor code here later.
+                        # For now this proves the key works.
+
+                if event.key == pygame.K_2:
+                    if "GTR" in menu:
+                        meta = editor.file.metadata.get(editor.context_pos)
+
+                        if meta and len(meta["data"]) > 1:
+                            room_path = meta["data"][1]
+                            print("Going to room:", room_path)
+
+                            load_room(editor, room_path)
+                            editor.menu_open = False
+
+        # --------------------
+        # PAINTING
+        # --------------------
+
+        if painting:
+
+            mx, my = pygame.mouse.get_pos()
+
+            gx, gy = editor.screen_to_grid(mx, my)
+
+            editor.paint(gx, gy)
+
+        # --------------------
+        # CAMERA
+        # --------------------
+
+        keys = pygame.key.get_pressed()
+
+        speed = 10
+
+        if keys[pygame.K_a]:
+            editor.camera_x -= speed
+
+        if keys[pygame.K_d]:
+            editor.camera_x += speed
+
+        if keys[pygame.K_w]:
+            editor.camera_y -= speed
+
+        if keys[pygame.K_s]:
+            editor.camera_y += speed
+        if keys[pygame.K_PLUS] and tic<1:
+            editor.scroll(1)
+            tic=10
+        if keys[pygame.K_EQUALS] and tic<1:
+            editor.scroll(-1)
+            tic=10
+        tic-=1
+        
+        if editor.menu_open:
+            meta = editor.file.metadata.get(editor.context_pos)
+            menu = ["METADATA"]
+
+            if meta and "door" in meta.get("hover", ""):
+                menu = ["GTR", "METADATA"]
 
 
 
-                    editor.menu_open = False
-            screen.blit(text_surface, (mx + 13, my + 13))
+        # --------------------
+        # DRAW
+        # --------------------
+
+        screen.fill((20, 20, 20))
+
+        editor.draw(screen)
+
+        # --------------------
+        # HOVER TOOLTIP
+        # --------------------
+
+        mx, my = pygame.mouse.get_pos()
+
+        gx, gy = editor.screen_to_grid(mx, my)
+
+        meta = editor.file.metadata.get((gx, gy))
+
+        if meta:
+
+            hover_text = meta["hover"]
+
+            if hover_text and not painting:
+
+                font = pygame.font.SysFont(None, 24)
+
+                text_surface = font.render(
+                    hover_text,
+                    True,
+                    (255, 255, 255)
+                )
+
+                pygame.draw.rect(
+                    screen,
+                    (0, 0, 0),
+                    (
+                        mx + 10,
+                        my + 10,
+                        text_surface.get_width() + 10,
+                        text_surface.get_height() + 10
+                    )
+                )
+
+                screen.blit(
+                    text_surface,
+                    (mx + 15, my + 15)
+                )
+
+        # --------------------
+        # CONTEXT MENU
+        # --------------------
+
+        if editor.menu_open:
+            menu = get_context_menu(editor)
+
+            menu_x, menu_y = editor.menu_screen_pos
+            height = 80 if "GTR" in menu else 40
+
+            pygame.draw.rect(
+                screen,
+                (40, 40, 40),
+                (menu_x, menu_y, 220, height)
+            )
+
+            pygame.draw.rect(
+                screen,
+                (255, 255, 255),
+                (menu_x, menu_y, 220, height),
+                2
+            )
+
+            font = pygame.font.SysFont(None, 24)
+
+            if "METADATA" in menu:
+                screen.blit(
+                    font.render("1 Edit Metadata", True, (255, 255, 255)),
+                    (menu_x + 10, menu_y + 10)
+                )
+
+            if "GTR" in menu:
+                screen.blit(
+                    font.render("2 Go To Room", True, (255, 255, 255)),
+                    (menu_x + 10, menu_y + 40)
+                )
+
+        else:
+            menu = []
+        # --------------------
+        # SELECTED TILE UI
+        # --------------------
+
+        font = pygame.font.SysFont(None, 24)
+
+        selected = editor.palette[editor.selected_index]
+
+        screen.blit(
+            font.render(
+                f"Selected: {selected}",
+                True,
+                (255,255,255)
+            ),
+            (10,10)
+        )
+
         pygame.display.flip()
 
     pygame.quit()
-
-
-if __name__ == "__main__":
-    main()
+main()
