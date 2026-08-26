@@ -15,7 +15,7 @@ class Brain:
     def __init__(
         self,
         input_size,
-        hidden_layers=[32, 32],
+        hidden_layers=[2,2,2,2],
         output_size=4
     ):
         self.input_size = input_size
@@ -292,7 +292,7 @@ class SnakeGame:
 
 brain = Brain(
     input_size=12,
-    hidden_layers=[32, 32],
+    hidden_layers=[24,32],
     output_size=4
 )
 
@@ -421,7 +421,7 @@ while running:
     # =====================================================
     # REWARD
     # =====================================================
-
+    
     if result == "dead":
         reward -=10
         
@@ -430,10 +430,11 @@ while running:
 
     else:
         if dist_after < dist_before:
-            reward += 1
+            reward += 3
         else:
             reward -= 1
     reward+=game.length-4
+
     # =====================================================
     # TRAIN
     # =====================================================
@@ -445,7 +446,7 @@ while running:
     brain.train(
         state,
         targets,
-        learning_rate=0.001
+        learning_rate=0.01
     )
 
     # =====================================================
