@@ -1,85 +1,65 @@
-class MapEditor:
-    def __init__(self, path):
-        self.file = MapFile(path)
+import pygame
 
-        self.tile_size = 32
-        self.camera_x = 0
-        self.camera_y = 0
+pygame.init()
+screen = pygame.display.set_mode((800, 600))
+font = pygame.font.SysFont(None, 24)
 
-        self.tiles = {}
-        self.load_tiles()
+# State variables
+popup_active = False
+popup_pos = (0, 0)
+options = ["Inspect", "Use", "Destroy"]
 
-        self.palette = list(self.file.definitions.keys())
-        self.selected_index = 0
-        self.context_tile = None
-        self.context_pos = (0, 0)
-        self.menu_open = False
-        self.center_camera()
+# Define the target object (e.g., a chest, an NPC, or a button)
+target_object = pygame.Rect(350, 250, 100, 100)
 
-    # ----------------------------
-    # LOAD SPRITES
-    # ----------------------------
-    def load_tiles(self):
-        self.tiles = {}
+running = True
+while running:
+  screen.fill((30, 30, 30))
 
-        for key, value in self.file.definitions.items():
+  # Draw the target object
+  pygame.draw.rect(screen, (0, 100, 255), target_object)
+  txt_target = font.render("Target", True, (255, 255, 255))
+  screen.blit(txt_target, (target_object.x + 20, target_object.y + 40))
 
-            asset = value[0]
+  for event in pygame.event.get():
+    if event.type == pygame.QUIT:
+      running = False
 
-            # NORMAL TILE (PNG)
-            if asset.endswith(".png"):
-                self.tiles[key] = Tile(asset)
-            if asset.endswith(":metadata"):
-                
-            # ENTITY / DOOR / SPECIAL OBJECT
-            else:
-                self.tiles[key] = {
-                    "type": "special",
-                    "data": value
-                }
-            
+    elif event.type == pygame.MOUSEBUTTONDOWN:
+      # Right click logic
+      if event.button == 3:
+        # CRITICAL CHANGE: Check if mouse is over the target object
+        if target_object.collidepoint(event.pos):
+          popup_active = True
+          popup_pos = event.pos
+        else:
+          popup_active = False  # Close menu if right-clicking empty space
 
-    # ----------------------------
-    # CAMERA CENTER
-    # ----------------------------
+      # Left click logic
+      elif event.button == 1 and popup_active:
+        x, y = popup_pos
+        menu_rect = pygame.Rect(x, y, 120, len(options) * 30)
 
-    def center_camera(self):
-        if not self.file.tiles:
-            return
+        if menu_rect.collidepoint(event.pos):
+          # Calculate item index based on vertical offset
+          clicked_index = (event.pos[1] - y) // 30
+          if 0 <= clicked_index < len(options):
+            print(f"Action: {options[clicked_index]} on target!")
+          popup_active = False
+        else:
+          popup_active = False  # Clicked outside menu, dismiss it
 
-        max_x = max(x for x, y in self.file.tiles.keys())
-        max_y = max(y for x, y in self.file.tiles.keys())
+  # Draw popup menu on top if active
+  if popup_active:
+    x, y = popup_pos
+    menu_rect = pygame.Rect(x, y, 120, len(options) * 30)
+    pygame.draw.rect(screen, (50, 50, 50), menu_rect)
+    pygame.draw.rect(screen, (200, 200, 200), menu_rect, 2)
 
-        self.camera_x = (max_x * self.tile_size) // 2 - W // 2
-        self.camera_y = (max_y * self.tile_size) // 2 - H // 2
+    for i, text in enumerate(options):
+      txt_surf = font.render(text, True, (255, 255, 255))
+      screen.blit(txt_surf, (x + 10, y + 5 + (i * 30)))
 
-    # ----------------------------
-    # GRID CONVERSION
-    # ----------------------------
+  pygame.display.flip()
 
-    def screen_to_grid(self, x, y):
-        gx = (x + self.camera_x) // self.tile_size
-        gy = (y + self.camera_y) // self.tile_size
-        return int(gx), int(gy)
-
-    # ----------------------------
-    # PAINT (AUTO EXPAND WORLD)
-    # ----------------------------
-
-    def paint(self, x, y):
-        key = self.palette[self.selected_index]
-        self.file.tiles[(x, y)] = key
-
-    # ----------------------------
-    # PALETTE SCROLL
-    # ----------------------------
-
-    def scroll(self, direction):
-        self.selected_index = (self.selected_index + direction) % len(self.palette)
-
-    # ----------------------------
-    # SAVE
-    # ----------------------------
-
-    def save(self):
-        self.file.save()
+pygame.quit()
